@@ -1,0 +1,100 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build application
+      run: npm run build
+      
+    - name: Create issue on failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `Build failed on ${context.sha.substring(0, 7)}`;
+          const body = `
+          @copilot The CI/CD pipeline failed on commit ${context.sha}.
+          
+          **Workflow:** ${context.workflow}
+          **Job:** ${context.job}
+          **Run ID:** ${context.runId}
+          **Run URL:** ${context.payload.repository.html_url}/actions/runs/${context.runId}
+          
+          Please analyze the failure and provide a fix.
+          
+          ## Quick Actions
+          @copilot fix the build failure
+          @copilot analyze the logs and suggest a solution
+          
+          ---
+          *This issue was automatically created by GitHub Actions*
+          `;
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'ci-failure', 'auto-generated']
+          });
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build Docker image
+      run: docker build -t socialsync-ai .
+      
+    - name: Create issue on Docker failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const title = `Docker build failed on ${context.sha.substring(0, 7)}`;
+          const body = `
+          @copilot The Docker build failed on commit ${context.sha}.
+          
+          **Workflow:** ${context.workflow}
+          **Job:** ${context.job}
+          **Run ID:** ${context.runId}
+          **Run URL:** ${context.payload.repository.html_url}/actions/runs/${context.runId}
+          
+          Please check the Dockerfile and fix any issues.
+          
+          ## Quick Actions
+          @copilot fix the Docker build
+          @copilot review the Dockerfile for issues
+          
+          ---
+          *This issue was automatically created by GitHub Actions*
+          `;
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'docker', 'ci-failure', 'auto-generated']
+          });
